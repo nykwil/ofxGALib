@@ -6,7 +6,7 @@
 
 float Objective(GAGenome& g);
 
-void ofxGALib::setup(const vector<RangeInfo>& ranges, int repeat)
+void ofxGALib::setup(const vector<RangeInfo>& ranges, int repeat, int popsize, int ngen, float pmut, float pcross)
 {
     mRepeat = repeat;
 
@@ -35,8 +35,7 @@ void ofxGALib::setup(const vector<RangeInfo>& ranges, int repeat)
     // also use the user data function in the genome to keep track of our
     // target values.
 
-    if (mGenome)
-        delete mGenome;
+    if (mGenome) delete mGenome;
 
     mGenome = new GABin2DecGenome(map, Objective, (void *)this);
 
@@ -44,6 +43,23 @@ void ofxGALib::setup(const vector<RangeInfo>& ranges, int repeat)
     // arrays.  We also set one of them to integer value to show how you can get
     // explicit integer representations by choosing your number of bits
     // appropriately.
+
+	unsigned int seed = ofGetUnixTime();
+
+	GARandomSeed(seed);
+
+	// Now create the GA using the genome, set the parameters, and run it.
+	if (ga) delete ga;
+	ga = new GASimpleGA(*mGenome);
+	ga->populationSize(popsize);
+	ga->nGenerations(ngen);
+	ga->pMutation(pmut);
+	ga->pCrossover(pcross);
+	ga->scoreFilename("bog.dat");
+	ga->flushFrequency(0);	// dump scores to disk every 50th generation
+	ga->initialize(seed); 
+
+	started = true;
 }
 
 float ofxGALib::evaluate( const vector<float>& values )
@@ -52,40 +68,34 @@ float ofxGALib::evaluate( const vector<float>& values )
     return 0;   
 }
 
-ofxGALib::ofxGALib() : mFunc(0), mGenome(0)
+ofxGALib::ofxGALib() : mFunc(0), mGenome(0), ga(0)
 {
     setFitness(this, &ofxGALib::evaluate);
+	started = false;
 }
 
-float ofxGALib::run( unsigned int seed )
+ofxGALib::~ofxGALib()
 {
-    if (seed == 0)
-        seed = ofGetUnixTime();
+	if (mGenome) delete mGenome;
+	if (ga) delete ga;
+}
 
-    int popsize  = 25;
-    int ngen     = 50;
-    float pmut   = 0.05;
-    float pcross = 0.4;
+float ofxGALib::run(int times)
+{
+	for (int i = 0; i < times && !ga->done(); ++i) {
+		ga->step();
+	} 
 
-    GARandomSeed(seed);
-
-    // Now create the GA using the genome, set the parameters, and run it.
-    GASimpleGA ga(*mGenome);
-    ga.populationSize(popsize);
-    ga.nGenerations(ngen);
-    ga.pMutation(pmut);
-    ga.pCrossover(pcross);
-    ga.scoreFilename("bog.dat");
-    ga.flushFrequency(0);	// dump scores to disk every 50th generation
-    ga.evolve(seed);
-
-//    GABin2DecGenome genome();
-    *mGenome = ga.statistics().bestIndividual();
-
+    *mGenome = ga->statistics().bestIndividual();
     for(int i = 0; i < mGenome->nPhenotypes(); i++){
         mOut[i] = mGenome->phenotype(i);
     }
     return mGenome->score();
+}
+
+bool ofxGALib::done()
+{
+	return ga->done();
 }
 
 float Objective(GAGenome& g)
